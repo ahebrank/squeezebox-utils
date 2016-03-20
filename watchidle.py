@@ -1,14 +1,14 @@
 #!/usr/bin/python
 # monitor players for idle status and turn them off if they're just sitting there
 
-import urllib2, BeautifulSoup, pickle, time
+import os, urllib2, BeautifulSoup, pickle, time
 
 class PlayerStatus():
   """ 
   track the status of the players and determine idleness
   """
   fn = os.path.join(os.path.expanduser('~'), '.playerstatus')
-  idle_minutes = 30
+  idle_minutes = None
   statuses = {}
 
   def __init__(self, idle_minutes = 30):
@@ -18,7 +18,7 @@ class PlayerStatus():
     """
     save the current statuses
     """
-    for self.statuses as s:
+    for s in self.statuses:
       if not 'timestamp' in self.statuses[s]:
         self.statuses[s]['timestamp'] = time.time()
     pickle.dump(self.statuses, open(self.fn, 'wb'))
@@ -42,7 +42,7 @@ class PlayerStatus():
     """
     look at the player statuses, see if any have been idle for a while
     """
-    to_be_idled = []
+    to_be_turned_off = []
     
     if self.load():
       # there are some prior statuses
@@ -51,22 +51,22 @@ class PlayerStatus():
         if k not in self.statuses:
           self.statuses[k] = statuses[k]
 
-        if statuses[k]['powerStatus'] == 'on' and self.statuses[k]['powerStatus'] == 'on'
-          and statuses[k]['playStatus'] == 'stop' and self.statuses[k]['playStatus'] == 'stop'
-          and (time.time() - self.statuses[k]['timestamp']) > 60*self.idle_minutes:
+        if ( (statuses[k]['powerStatus'] == 'on') and (self.statuses[k]['powerStatus'] == 'on') and
+          (statuses[k]['playStatus'] == 'stop') and (self.statuses[k]['playStatus'] == 'stop') and
+          ((time.time() - self.statuses[k]['timestamp']) > 60*self.idle_minutes) ):
             # idle exceeded; return the mac address
-            to_be_idled.append(k)
-        elif (statuses[k]['powerStatus'] != self.statuses[k]['powerStatus']) 
-          or (statuses[k]['playStatus'] != self.statuses[k]['playStatus']):
+            to_be_turned_off.append(k)
+        elif ( (statuses[k]['powerStatus'] != self.statuses[k]['powerStatus']) or
+          (statuses[k]['playStatus'] != self.statuses[k]['playStatus']) ):
             # something has changed; update the timestamp
             statuses[k]['timestamp'] = now
         else:
           # no change; keep the old timestamp
-          statuses[k]['timestamp'] = cached_statuses[k]['timestamp']
+          statuses[k]['timestamp'] = self.statuses[k]['timestamp']
 
     self.statuses = statuses
     self.save()
-    return to_be_idled
+    return to_be_turned_off
 
 class SqueezeComm():
   """
@@ -75,7 +75,7 @@ class SqueezeComm():
   host = ""
   port = ""
 
-  def __init__(host, port):
+  def __init__(self, host, port):
     self.host = host
     self.port = port
 
@@ -94,7 +94,7 @@ class SqueezeComm():
     return None
 
   def fetch_html(self, query_params):
-    return url_fetch("http://%s:%s/status.html%s" % (self.host, self.port, query_params))
+    return self.url_fetch("http://%s:%s/status.html%s" % (self.host, self.port, query_params))
 
   def get_soup(self, mac = None):
     """
@@ -106,11 +106,11 @@ class SqueezeComm():
     html = self.fetch_html(query_params)
     return BeautifulSoup.BeautifulSoup(html)
 
-  def get_player_status(mac):
+  def get_player_status(self, mac):
     """
     return current player status given a mac address
     """
-    bs = get_soup(mac)
+    bs = self.get_soup(mac)
     statuses = bs.findAll('b')
 
     # statuses will be play, pause, or stop
@@ -118,17 +118,17 @@ class SqueezeComm():
             'powerStatus': statuses[3].text.lower()}
 
 
-  def statuses(macs = None):
+  def statuses(self, macs = None):
     """
     return a dictionary of play status for each player
     """
     if macs is None:
-      bs = get_soup()
+      bs = self.get_soup()
       player_select = bs.find('select', {'name': 'player'})
       macs = [p['value'] for p in player_select.findAll('option')]
-    return {mac: get_player_status(mac) for mac in macs}
+    return {mac: self.get_player_status(mac) for mac in macs}
 
-  def turn_off(mac):
+  def turn_off(self, mac):
     """
     turn off a player
     """
