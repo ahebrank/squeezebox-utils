@@ -34,11 +34,14 @@ def subscribe_squeezebox():
   power_pat = r'%s power ([10])' % get_mac()
   regex = re.compile(power_pat)
 
-  s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-  s.settimeout(2)
-
-  s.connect((SERVER_HOST, SERVER_PORT))
-  s.send("subscribe power\n")
+  try:
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(2)
+    s.connect((SERVER_HOST, SERVER_PORT))
+    s.send("subscribe power\n")
+  except:
+    print "Unable to connect; retrying in %d seconds" % RESTART_DELAY
+    return
 
   # loop until the socket expires
   while 1:
