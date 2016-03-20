@@ -2,12 +2,14 @@
 # runs on the player, watches the player's power status as reported by the server
 # and sends lirc commands to turn an amp on or off
 
-import socket, select, sys, re, subprocess, uuid
+import socket, select, sys, re, subprocess, uuid, time
 
 SERVER_HOST = "slug"
 SERVER_PORT = 9090
 
 PLAYER_MAC = get_mac()
+
+RESTART_DELAY = 30
 
 IRSEND = "/usr/bin/irsend"
 REMOTE = "ONKYO_RC-606S"
@@ -40,7 +42,7 @@ def subscribe_squeezebox():
   s.connect((SERVER_HOST, SERVER_PORT))
   s.send("subscribe power\n")
 
-  # loop forever, watching the socket for power status changes
+  # loop until the socket expires
   while 1:
     read_sockets, write_sockets, error_sockets = select.select([s] , [], [])
 
@@ -48,7 +50,9 @@ def subscribe_squeezebox():
       if sock == s:
         data = sock.recv(4096)
         if not data:
-          sys.exit()
+          # socket probably lost so restart the socket
+          print "Lost socket connection; restarting in %d seconds" % RESTART_DELAY
+          return
         else:
           match = regex.search(data)
           if match is not None:
@@ -59,4 +63,8 @@ def subscribe_squeezebox():
               send_lirc('KEY_SLEEP')
 
 if __name__ == "__main__":
-  subscribe_squeezebox()
+  # loop forever
+  # if the socket expires, restart it
+  while 1:
+    subscribe_squeezebox()
+    time.sleep(RESTART_DELAY)
