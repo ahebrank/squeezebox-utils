@@ -7,8 +7,6 @@ import socket, select, sys, re, subprocess, uuid, time
 SERVER_HOST = "slug"
 SERVER_PORT = 9090
 
-PLAYER_MAC = get_mac()
-
 RESTART_DELAY = 30
 
 IRSEND = "/usr/bin/irsend"
@@ -33,7 +31,7 @@ def subscribe_squeezebox():
   """
   open a socket to the server, watch the power status of the players
   """
-  power_pat = r'%s power ([10])' % PLAYER_MAC
+  power_pat = r'%s power ([10])' % get_mac()
   regex = re.compile(power_pat)
 
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
