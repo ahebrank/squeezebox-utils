@@ -145,4 +145,5 @@ if __name__ == "__main__":
   idle_macs = PS.check_idle(statuses)
 
   for mac in idle_macs:
+    print "Turning off idle %s" % (mac)
     SC.turn_off(mac)
