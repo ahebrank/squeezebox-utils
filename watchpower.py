@@ -9,9 +9,16 @@ SERVER_PORT = 9090
 
 RESTART_DELAY = 30
 RECONNECT_INTERVAL = 300
+DEBUG = False
 
 IRSEND = "/usr/bin/irsend"
 REMOTE = "ONKYO_RC-606S"
+
+def log(message, debug_only=False):
+  if debug_only and not DEBUG:
+    return
+  print "[%s] %s" % (time.strftime('%Y-%m-%d %H:%M:%S'), message)
+
 
 def get_mac():
   """
@@ -25,7 +32,10 @@ def send_lirc(cmd):
   send an IR command out, using the shell
   """
   irsend_cmd = "%s SEND_ONCE %s %s" % (IRSEND, REMOTE, cmd)
-  subprocess.call(irsend_cmd.split(' '))
+  log("Sending LIRC command: %s" % cmd, debug_only=True)
+  result = subprocess.call(irsend_cmd.split(' '))
+  if result != 0:
+    log("irsend exited with status %d" % result)
 
 
 def subscribe_squeezebox():
@@ -36,16 +46,18 @@ def subscribe_squeezebox():
   regex = re.compile(power_pat)
 
   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  log("Connecting to %s:%d" % (SERVER_HOST, SERVER_PORT), debug_only=True)
   try:
     s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
     s.settimeout(2)
     s.connect((SERVER_HOST, SERVER_PORT))
     s.send("subscribe power\n")
   except socket.error, e:
-    print "Unable to connect (%s); retrying in %d seconds" % (e, RESTART_DELAY)
+    log("Unable to connect (%s); retrying in %d seconds" % (e, RESTART_DELAY))
     s.close()
     return
 
+  log("Connected; subscribed to power events for %s" % get_mac(), debug_only=True)
   try:
     # Periodically reconnect even if no events arrive. A dropped connection
     # without a TCP close notification would otherwise leave select() blocked.
@@ -54,7 +66,8 @@ def subscribe_squeezebox():
         [s], [], [], RECONNECT_INTERVAL)
 
       if not read_sockets:
-        print "Refreshing socket connection"
+        log("Refreshing socket connection after %d seconds without data" %
+            RECONNECT_INTERVAL)
         return
 
       for sock in read_sockets:
@@ -62,22 +75,30 @@ def subscribe_squeezebox():
           data = sock.recv(4096)
           if not data:
             # socket probably lost so restart the socket
-            print "Lost socket connection; restarting in %d seconds" % RESTART_DELAY
+            log("Lost socket connection; restarting in %d seconds" % RESTART_DELAY)
             return
           else:
             match = regex.search(data)
             if match is not None:
               power_status = match.groups(1)[0]
+              log("Received power status: %s" % power_status, debug_only=True)
               if power_status == '1':
                 send_lirc('KEY_POWER')
               else:
                 send_lirc('KEY_SLEEP')
+            else:
+              log("Received data with no matching power event: %r" % data,
+                  debug_only=True)
   except (socket.error, select.error), e:
-    print "Socket error (%s); restarting in %d seconds" % (e, RESTART_DELAY)
+    log("Socket error (%s); restarting in %d seconds" % (e, RESTART_DELAY))
   finally:
     s.close()
 
 if __name__ == "__main__":
+  if '-d' in sys.argv or '--debug' in sys.argv:
+    DEBUG = True
+    log("Debug logging enabled")
+
   # loop forever
   # if the socket expires, restart it
   while 1:
